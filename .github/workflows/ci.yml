@@ -1,0 +1,15 @@
+# 每次 push 都自動跑測試，確認沒有改壞東西
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python data/seed/make_seed.py && python -m ml.train
+      - run: pytest -q
+      - run: python -m evals.run_eval   # V0 評估，不需要 API 金鑰

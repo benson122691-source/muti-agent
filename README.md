@@ -1,0 +1,72 @@
+# 詐騙訊息多 Agent 查核系統
+
+貼上一則可疑訊息，系統用多個 AI agent 同時查核，回傳風險等級、具體證據和建議。
+
+本專案的重點不只是 demo，而是**用同一份測試集比較四個版本**，用數據回答「多 agent 到底值不值得」：
+
+| 版本 | 架構 |
+| --- | --- |
+| V0 | 只用 ML 分類器（不呼叫 LLM） |
+| V1 | 單一 agent，擁有全部工具 |
+| V2 | 分流 → 4 個查核 agent 平行執行 → 彙整 |
+| V3 | V2 ＋ 審查 agent，不通過就退回重查 |
+
+```text
+使用者訊息 → 分流 agent ─┬─ 連結查核（隔離環境）─┐
+                          ├─ 話術分析            ├→ 彙整 agent → 審查 agent → 報告
+                          ├─ 身分查核            │        ↑           │
+                          └─ 相似案例 ───────────┘        └─ 退回重查 ─┘
+```
+
+想讀懂程式碼，請從 [docs/程式導讀.md](docs/程式導讀.md) 開始。
+
+## 快速開始（本機）
+
+```bash
+# 1. 安裝套件（建議先建立虛擬環境：python -m venv .venv）
+pip install -r requirements.txt
+
+# 2. 產生範例資料、訓練分類器
+python data/seed/make_seed.py
+python -m ml.train
+
+# 3. 設定 API 金鑰（沒有金鑰也能跑，但只能用 V0）
+cp .env.example .env      # 然後編輯 .env，填入 ANTHROPIC_API_KEY
+
+# 4. 啟動（開兩個終端機）
+uvicorn sandbox.service:app --port 8001     # 隔離抓取服務
+uvicorn api.main:app --reload --port 8000   # 主程式
+```
+
+打開 http://localhost:8000 就能使用。
+
+## 用 Docker 啟動
+
+```bash
+docker compose up --build
+```
+
+## 常用指令
+
+| 指令 | 用途 |
+| --- | --- |
+| `pytest` | 跑單元測試（用假模型，不需要金鑰、不花錢） |
+| `python -m evals.run_eval` | 評估 V0 |
+| `python -m evals.run_eval --versions v0 v1 v2 v3 --repeats 3` | 四個版本完整對照（需要金鑰） |
+| `python -m ml.train --data 你的資料.jsonl` | 用自己的資料重新訓練分類器 |
+| `python -m crawlers.update_data` | 下載最新的 165 開放資料 |
+
+## 安全設計
+
+- **隔離抓取：** 可疑網頁只由 `sandbox/` 服務打開。該容器沒有 API 金鑰、檔案系統唯讀，只回傳摘要欄位，不回傳整頁 HTML。
+- **防 prompt injection：** 使用者內容一律包在 `<message>` 標籤中，所有 prompt 都規定標籤內只是資料。
+- **防 SSRF：** 隔離服務拒絕抓取內網位址，每一次轉址都會檢查。
+- **成本上限：** 每個 agent 有步數上限，每日 LLM 查核有次數上限，超過就自動降級成 V0。
+- **個資：** 記錄檔存檔前遮罩手機、身分證字號、帳號。
+
+## ⚠️ 目前的資料是合成的
+
+`data/seed/` 和 `evals/sample_testset.jsonl` 是手寫的範例，只是讓程式能先跑起來。
+正式使用前請換成真實資料，步驟見 [docs/程式導讀.md](docs/程式導讀.md) 第 5 節。
+
+查核結果僅供參考，如有疑慮請撥打 165 反詐騙諮詢專線。

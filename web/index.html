@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>詐騙訊息查核</title>
+  <style>
+    :root { --ink: #1f2328; --quiet: #656d76; --line: #d0d7de; --bg: #f6f8fa;
+            --high: #cf222e; --medium: #bf8700; --low: #1a7f37; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, "Noto Sans TC", sans-serif; color: var(--ink); background: var(--bg); }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    .sub { color: var(--quiet); margin: 0 0 24px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    textarea { width: 100%; min-height: 140px; font: inherit; padding: 12px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+    .row { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+    select, button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+    button.primary { background: var(--ink); color: #fff; border-color: var(--ink); cursor: pointer; }
+    button:disabled { opacity: .5; cursor: wait; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; color: #fff; font-weight: 600; }
+    .badge.high { background: var(--high); } .badge.medium { background: var(--medium); } .badge.low { background: var(--low); }
+    .meta { color: var(--quiet); font-size: 13px; margin-top: 8px; }
+    .finding { border-top: 1px solid var(--line); padding: 12px 0; }
+    .finding h3 { font-size: 15px; margin: 0 0 6px; }
+    .finding ul { margin: 0; padding-left: 20px; }
+    .signal { font-size: 12px; padding: 2px 8px; border-radius: 6px; margin-left: 6px; background: var(--bg); border: 1px solid var(--line); }
+    .warn { color: var(--medium); font-size: 14px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>詐騙訊息查核</h1>
+  <p class="sub">貼上可疑的訊息或廣告，多個 AI agent 會同時查核並給出證據。結果僅供參考，有疑慮請撥打 165。</p>
+
+  <div class="card">
+    <textarea id="text" placeholder="例如：名師帶你抓飆股，保證獲利 30%，加 LINE 領取明牌…"></textarea>
+    <div class="row">
+      <label>版本
+        <select id="version">
+          <option value="v3" selected>V3 多 agent ＋ 審查</option>
+          <option value="v2">V2 多 agent</option>
+          <option value="v1">V1 單一 agent</option>
+          <option value="v0">V0 只用分類器</option>
+        </select>
+      </label>
+      <button id="submit" class="primary">開始查核</button>
+      <span id="status" class="meta"></span>
+    </div>
+  </div>
+
+  <div id="result" class="card hidden">
+    <span id="risk" class="badge"></span>
+    <strong id="type" style="margin-left:8px"></strong>
+    <p id="summary"></p>
+    <p><strong>建議：</strong><span id="advice"></span></p>
+    <p id="downgrade" class="warn"></p>
+    <div class="meta" id="meta"></div>
+
+    <h2 style="font-size:17px;margin-top:20px">各 agent 的查核結果</h2>
+    <div id="findings"></div>
+
+    <div class="row">
+      <span class="meta">判斷錯了嗎？</span>
+      <button data-scam="true" class="feedback">其實是詐騙</button>
+      <button data-scam="false" class="feedback">其實不是詐騙</button>
+      <span id="feedback-status" class="meta"></span>
+    </div>
+  </div>
+</main>
+
+<script>
+  // 風險等級和 agent 名稱的中文對照
+  const RISK_TEXT = { high: "高風險", medium: "中風險", low: "低風險" };
+  const AGENT_TEXT = {
+    link_checker: "連結查核", script_analyzer: "話術分析", identity_checker: "身分查核",
+    case_matcher: "相似案例", single_agent: "單一 agent", ml_classifier: "ML 分類器",
+  };
+  const SIGNAL_TEXT = { scam: "發現詐騙訊號", clean: "未發現問題", unknown: "無法判斷" };
+
+  let lastTraceId = null;
+  const $ = (id) => document.getElementById(id);
+
+  // 安全：所有文字都用 textContent 放進畫面，不用 innerHTML，
+  // 避免訊息裡的 <script> 之類內容被瀏覽器執行（XSS）
+  function el(tag, text, className) {
+    const node = document.createElement(tag);
+    if (text !== undefined) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+  }
+
+  async function submitCheck() {
+    const text = $("text").value.trim();
+    if (!text) return;
+    $("submit").disabled = true;
+    $("status").textContent = "查核中，約需 10 到 30 秒…";
+
+    try {
+      const response = await fetch("/api/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, version: $("version").value }),
+      });
+      if (!response.ok) throw new Error(`伺服器錯誤 ${response.status}`);
+      showResult(await response.json());
+      $("status").textContent = "";
+    } catch (error) {
+      $("status").textContent = `查核失敗：${error.message}`;
+    } finally {
+      $("submit").disabled = false;
+    }
+  }
+
+  function showResult(data) {
+    const report = data.report;
+    lastTraceId = data.trace_id;
+
+    $("risk").textContent = RISK_TEXT[report.risk_level];
+    $("risk").className = `badge ${report.risk_level}`;
+    $("type").textContent = report.scam_type;
+    $("summary").textContent = report.summary;
+    $("advice").textContent = report.advice;
+    $("downgrade").textContent = data.downgrade_reason;
+    $("meta").textContent =
+      `版本 ${data.version_used.toUpperCase()}｜${data.elapsed_sec} 秒｜${data.tokens} tokens` +
+      (data.cost_twd ? `｜約 NT$${data.cost_twd}` : "") +
+      (data.version_used === "v3" ? `｜${report.reviewed ? "已通過審查" : "未通過審查"}` : "");
+
+    const box = $("findings");
+    box.replaceChildren();
+    for (const f of report.findings) {
+      const div = el("div", undefined, "finding");
+      const title = el("h3", AGENT_TEXT[f.agent] || f.agent);
+      title.append(el("span", `${SIGNAL_TEXT[f.signal]}・信心 ${Math.round(f.confidence * 100)}%`, "signal"));
+      div.append(title);
+      const list = el("ul");
+      for (const e of f.evidence) list.append(el("li", e));
+      div.append(list);
+      box.append(div);
+    }
+
+    $("feedback-status").textContent = "";
+    $("result").classList.remove("hidden");
+  }
+
+  async function sendFeedback(event) {
+    if (!lastTraceId) return;
+    await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trace_id: lastTraceId, is_scam: event.target.dataset.scam === "true" }),
+    });
+    $("feedback-status").textContent = "謝謝回報，我們會人工複核。";
+  }
+
+  $("submit").addEventListener("click", submitCheck);
+  document.querySelectorAll(".feedback").forEach((b) => b.addEventListener("click", sendFeedback));
+</script>
+</body>
+</html>

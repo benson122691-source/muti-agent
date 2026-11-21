@@ -1,0 +1,24 @@
+# 本機一鍵啟動：docker compose up --build
+# 然後打開 http://localhost:8000
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      SANDBOX_URL: http://sandbox:8001
+    volumes:
+      - ./logs:/app/logs          # 查核記錄留在本機，方便除錯
+      - ./data/raw:/app/data/raw  # 下載的開放資料
+    depends_on:
+      - sandbox
+
+  # 隔離抓取服務：唯一可以打開可疑網頁的服務
+  # 刻意不給 env_file，所以這個容器裡沒有 API 金鑰
+  sandbox:
+    build: .
+    command: uvicorn sandbox.service:app --host 0.0.0.0 --port 8001
+    read_only: true               # 檔案系統唯讀，就算被攻擊也寫不了東西
+    tmpfs:
+      - /tmp

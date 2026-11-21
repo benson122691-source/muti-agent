@@ -1,0 +1,24 @@
+# 每天台灣時間早上 6 點下載最新的 165 開放資料
+# 下載網址請設定在 GitHub repo 的 Settings → Secrets and variables → Actions
+name: 更新開放資料
+on:
+  schedule:
+    - cron: "0 22 * * *"   # UTC 22:00 = 台灣時間 06:00
+  workflow_dispatch:        # 也可以在 GitHub 網頁上手動執行
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m crawlers.update_data
+        env:
+          URL_165_FAKE_INVEST_CSV: ${{ secrets.URL_165_FAKE_INVEST_CSV }}
+          URL_165_SUSPENDED_DOMAINS_CSV: ${{ secrets.URL_165_SUSPENDED_DOMAINS_CSV }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-data
+          path: data/raw/
