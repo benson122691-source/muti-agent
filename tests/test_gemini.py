@@ -131,6 +131,18 @@ def test_retries_when_model_is_busy():
     assert result.signal == "scam"
 
 
+def test_daily_quota_is_not_retried():
+    """每日額度用完時，重試也沒用，應該馬上放棄。"""
+    quota_error = errors.ClientError(429, {"error": {
+        "code": 429, "message": "You exceeded your current quota", "status": "RESOURCE_EXHAUSTED",
+        "details": [{"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}],
+    }})
+    client = FakeGeminiClient([quota_error])
+    with pytest.raises(errors.ClientError):
+        asyncio.run(make_checkers()["script_analyzer"].run("測試", GeminiLLM(client=client), Trace()))
+    assert len(client.requests) == 1
+
+
 def test_other_errors_are_not_retried():
     client = FakeGeminiClient([errors.ClientError(400, {"error": {"message": "bad request"}})])
     with pytest.raises(errors.ClientError):

@@ -62,7 +62,7 @@ docker compose up --build
 
 | 設定值 | 需要的金鑰 | 申請地點 | 預設模型 |
 | --- | --- | --- | --- |
-| `gemini` | `GEMINI_API_KEY` | Google AI Studio（有免費額度） | gemini-3.8-flash |
+| `gemini` | `GEMINI_API_KEY` | Google AI Studio（有免費額度） | gemini-3.5-flash / gemini-3.1-flash-lite |
 | `claude` | `ANTHROPIC_API_KEY` | Claude Console | claude-sonnet-5-5 / claude-haiku-5-5 |
 
 ⚠️ Gemini 免費方案的內容可能被 Google 用來改進產品，並可能經人工審查。開發和測試合成資料沒問題；

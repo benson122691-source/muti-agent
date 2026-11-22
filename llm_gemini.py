@@ -75,6 +75,8 @@ class GeminiLLM:
             except errors.APIError as e:
                 if e.code not in RETRYABLE_CODES or attempt == MAX_RETRIES:
                     raise
+                if e.code == 429 and "PerDay" in str(e.details or e):
+                    raise  # 「今天的額度用完了」：等幾秒也不會恢復，重試只是浪費時間
                 trace.log(agent_name, "error", f"Gemini 回傳 {e.code}，{wait} 秒後重試")
                 await asyncio.sleep(wait)
                 wait *= 2

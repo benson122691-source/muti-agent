@@ -30,7 +30,8 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "claude").lower()
 # 沒在 .env 指定的話，依照 LLM_PROVIDER 用下面的預設值。
 _DEFAULT_MODELS = {
     "claude": ("claude-sonnet-5-5", "claude-haiku-5-5"),
-    "gemini": ("gemini-3.8-flash", "gemini-3.8-flash"),
+    # 這兩個模型在 Gemini 免費方案都有額度，而且額度分開計算，比較不容易撞到限制
+    "gemini": ("gemini-3.5-flash", "gemini-3.1-flash-lite"),
 }
 _default_strong, _default_fast = _DEFAULT_MODELS.get(LLM_PROVIDER, _DEFAULT_MODELS["claude"])
 MODEL_STRONG = os.getenv("MODEL_STRONG", _default_strong)
