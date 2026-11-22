@@ -5,15 +5,21 @@ tracing.py — 記錄一次查核過程中「每個 agent 做了什麼」。
 每次查核會存成 logs/traces/<trace_id>.jsonl，一行一個事件。
 
 存檔前會先用 privacy.mask_pii() 遮罩手機號碼、身分證字號等個資。
+
+另外每個事件也會印一行簡短記錄到伺服器記錄（部署在 Railway 時，在 Logs 頁面看得到），
+這樣查核卡住時，可以馬上看出卡在哪個 agent 的哪一步。
 """
 
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 
 import config
 from privacy import mask_pii
+
+logger = logging.getLogger("scam_checker")
 
 
 @dataclass
@@ -27,9 +33,16 @@ class Trace:
 
     def log(self, agent: str, kind: str, data) -> None:
         """記一筆事件。kind 例如：llm_call、tool_call、tool_result、output、error。"""
-        self.events.append(
-            {"t": round(time.time() - self.started_at, 3), "agent": agent, "kind": kind, "data": data}
-        )
+        elapsed = round(time.time() - self.started_at, 3)
+        self.events.append({"t": elapsed, "agent": agent, "kind": kind, "data": data})
+        # 伺服器記錄只印摘要：工具名稱或錯誤訊息，不印完整內容（避免把個資印出來）
+        if kind == "tool_call":
+            detail = data.get("tool", "")
+        elif kind == "error":
+            detail = mask_pii(str(data))[:200]
+        else:
+            detail = ""
+        logger.info("[%s] %6.1fs %-16s %-12s %s", self.trace_id, elapsed, agent, kind, detail)
 
     def add_usage(self, model: str, input_tokens: int, output_tokens: int) -> None:
         self.input_tokens[model] = self.input_tokens.get(model, 0) + input_tokens

@@ -53,6 +53,11 @@ USD_TO_TWD = float(os.getenv("USD_TO_TWD", "32"))
 MAX_STEPS_PER_AGENT = 6        # 每個 agent 最多跟模型來回幾次
 MAX_REVIEW_RETRIES = 1         # 審查不通過時，最多退回重查幾次
 MAX_LLM_CHECKS_PER_DAY = int(os.getenv("MAX_LLM_CHECKS_PER_DAY", "200"))
+
+# ---------- 時間上限（避免模型沒回應時一直卡住） ----------
+LLM_REQUEST_TIMEOUT_SEC = int(os.getenv("LLM_REQUEST_TIMEOUT_SEC", "45"))  # 單次呼叫模型最多等幾秒
+CHECK_TIMEOUT_SEC = int(os.getenv("CHECK_TIMEOUT_SEC", "120"))            # 一整次查核最多幾秒
+# 超過時間上限時，API 會改用 V0 回傳結果，不會讓使用者一直等。
 # 超過每日上限時，API 自動降級成 V0（只用 ML 分類器），不會直接停機。
 
 # ---------- 隔離抓取服務 ----------

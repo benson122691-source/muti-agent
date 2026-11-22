@@ -47,3 +47,18 @@ def test_check_falls_back_to_v0_when_model_fails(client, monkeypatch):
     data = response.json()
     assert data["version_used"] == "v0"
     assert "模型暫時無法使用" in data["downgrade_reason"]
+
+
+def test_check_falls_back_to_v0_on_timeout(client, monkeypatch):
+    """模型一直沒回應時，超過時間上限就改用 V0。"""
+    import asyncio
+
+    class SlowLLM:
+        async def create(self, **kwargs):
+            await asyncio.sleep(10)
+
+    monkeypatch.setattr(main, "llm", SlowLLM())
+    monkeypatch.setattr(config, "CHECK_TIMEOUT_SEC", 0.2)
+    data = client.post("/api/check", json={"text": "保證獲利加LINE", "version": "v3"}).json()
+    assert data["version_used"] == "v0"
+    assert "超過" in data["downgrade_reason"]

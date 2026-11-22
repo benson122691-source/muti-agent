@@ -95,7 +95,7 @@
     const text = $("text").value.trim();
     if (!text) return;
     $("submit").disabled = true;
-    $("status").textContent = "查核中，約需 10 到 30 秒…";
+    $("status").textContent = "查核中，通常需要 10 到 60 秒…";
 
     try {
       const response = await fetch("/api/check", {

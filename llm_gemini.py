@@ -27,6 +27,7 @@ from types import SimpleNamespace
 from google import genai
 from google.genai import errors, types
 
+import config
 from tracing import Trace
 
 # 這些錯誤通常等一下就會好，值得重試：
@@ -42,7 +43,11 @@ class GeminiLLM:
     """呼叫 Gemini API。需要環境變數 GEMINI_API_KEY（在 Google AI Studio 申請）。"""
 
     def __init__(self, client: genai.Client | None = None):
-        self.client = client or genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        self.client = client or genai.Client(
+            api_key=os.environ["GEMINI_API_KEY"],
+            # SDK 預設不會逾時，模型沒回應就會一直等；一定要設上限（單位是毫秒）
+            http_options=types.HttpOptions(timeout=config.LLM_REQUEST_TIMEOUT_SEC * 1000),
+        )
 
     async def create(
         self, *, model: str, system: str, messages: list, tools: list, trace: Trace, agent_name: str = ""

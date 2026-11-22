@@ -12,7 +12,9 @@ api/main.py — 網頁後端（FastAPI）。
   GET  /api/health     健康檢查（部署平台用來確認服務活著）
 """
 
+import asyncio
 import json
+import logging
 import time
 from datetime import date
 from pathlib import Path
@@ -25,6 +27,9 @@ from agents.pipeline import check
 from llm import make_llm
 from privacy import mask_pii
 from schemas import CheckRequest, FeedbackRequest
+
+# 讓 tracing.py 的每一步都印到伺服器記錄
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
 app = FastAPI(title="詐騙訊息多 Agent 查核系統")
 WEB_DIR = Path(__file__).parent.parent / "web"
@@ -68,7 +73,12 @@ async def api_check(req: CheckRequest):
     version, downgrade_reason = _pick_version(req.version)
     started = time.time()
     try:
-        report, trace = await check(req.text, version, llm)
+        # wait_for：超過時間上限就中斷，不讓使用者一直等
+        report, trace = await asyncio.wait_for(check(req.text, version, llm), timeout=config.CHECK_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
+        downgrade_reason = f"查核超過 {config.CHECK_TIMEOUT_SEC} 秒，模型可能太忙，已改用 V0（只用分類器），請稍後再試"
+        version = "v0"
+        report, trace = await check(req.text, "v0", llm)
     except Exception as e:  # noqa: BLE001
         # 例如分流或單一 agent 遇到模型暫時無法使用：改用 V0，讓使用者至少拿到結果
         downgrade_reason = f"模型暫時無法使用（{e.__class__.__name__}），已改用 V0（只用分類器），請稍後再試"

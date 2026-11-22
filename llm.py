@@ -41,7 +41,7 @@ class ClaudeLLM:
     """真正呼叫 Anthropic API。需要環境變數 ANTHROPIC_API_KEY。"""
 
     def __init__(self):
-        self.client = anthropic.AsyncAnthropic()
+        self.client = anthropic.AsyncAnthropic(timeout=config.LLM_REQUEST_TIMEOUT_SEC)
 
     async def create(
         self, *, model: str, system: str, messages: list, tools: list, trace: Trace, agent_name: str = ""
