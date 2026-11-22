@@ -30,8 +30,8 @@ pip install -r requirements.txt
 python data/seed/make_seed.py
 python -m ml.train
 
-# 3. 設定 API 金鑰（沒有金鑰也能跑，但只能用 V0）
-cp .env.example .env      # 然後編輯 .env，填入 ANTHROPIC_API_KEY
+# 3. 設定模型和 API 金鑰（沒有金鑰也能跑，但只能用 V0）
+cp .env.example .env      # 然後編輯 .env：LLM_PROVIDER 選 gemini 或 claude，填入對應的金鑰
 
 # 4. 啟動（開兩個終端機）
 uvicorn sandbox.service:app --port 8001     # 隔離抓取服務
@@ -55,6 +55,18 @@ docker compose up --build
 | `python -m evals.run_eval --versions v0 v1 v2 v3 --repeats 3` | 四個版本完整對照（需要金鑰） |
 | `python -m ml.train --data 你的資料.jsonl` | 用自己的資料重新訓練分類器 |
 | `python -m crawlers.update_data` | 下載最新的 165 開放資料 |
+
+## 支援的模型
+
+在 `.env` 的 `LLM_PROVIDER` 切換，其他程式都不用改：
+
+| 設定值 | 需要的金鑰 | 申請地點 | 預設模型 |
+| --- | --- | --- | --- |
+| `gemini` | `GEMINI_API_KEY` | Google AI Studio（有免費額度） | gemini-3.8-flash |
+| `claude` | `ANTHROPIC_API_KEY` | Claude Console | claude-sonnet-5-5 / claude-haiku-5-5 |
+
+⚠️ Gemini 免費方案的內容可能被 Google 用來改進產品，並可能經人工審查。開發和測試合成資料沒問題；
+公開上線讓別人貼真實訊息時，請改用付費方案。免費方案也有每分鐘次數限制，程式遇到 429 錯誤會自動等待重試。
 
 ## 安全設計
 

@@ -1,5 +1,6 @@
 # 執行需要的套件
 anthropic>=2.0
+google-genai>=1.50     # 使用 Gemini 時需要
 fastapi>=0.110
 uvicorn>=0.29
 pydantic>=2.6

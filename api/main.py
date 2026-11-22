@@ -13,7 +13,6 @@ api/main.py — 網頁後端（FastAPI）。
 """
 
 import json
-import os
 import time
 from datetime import date
 from pathlib import Path
@@ -23,15 +22,15 @@ from fastapi.responses import FileResponse
 
 import config
 from agents.pipeline import check
-from llm import ClaudeLLM
+from llm import make_llm
 from privacy import mask_pii
 from schemas import CheckRequest, FeedbackRequest
 
 app = FastAPI(title="詐騙訊息多 Agent 查核系統")
 WEB_DIR = Path(__file__).parent.parent / "web"
 
-# 沒有 API 金鑰時仍可運作，只是只能用 V0
-llm = ClaudeLLM() if os.getenv("ANTHROPIC_API_KEY") else None
+# 依 LLM_PROVIDER 建立 Claude 或 Gemini；沒有 API 金鑰時是 None，仍可運作，只是只能用 V0
+llm = make_llm()
 
 # 每日 LLM 查核次數（存在記憶體，服務重啟會歸零；上線後可改存資料庫）
 _daily_count = {"date": date.today(), "count": 0}
@@ -42,7 +41,8 @@ def _pick_version(requested: str) -> tuple[str, str]:
     if requested == "v0":
         return "v0", ""
     if llm is None:
-        return "v0", "未設定 ANTHROPIC_API_KEY，已改用 V0（只用分類器）"
+        key = "GEMINI_API_KEY" if config.LLM_PROVIDER == "gemini" else "ANTHROPIC_API_KEY"
+        return "v0", f"未設定 {key}，已改用 V0（只用分類器）"
 
     if _daily_count["date"] != date.today():
         _daily_count.update(date=date.today(), count=0)
@@ -60,7 +60,7 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "llm_enabled": llm is not None}
+    return {"ok": True, "llm_enabled": llm is not None, "provider": config.LLM_PROVIDER}
 
 
 @app.post("/api/check")

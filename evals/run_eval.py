@@ -24,14 +24,14 @@ import argparse
 import asyncio
 import csv
 import json
-import os
 import statistics
 import time
 from datetime import datetime
 from pathlib import Path
 
+import config
 from agents.pipeline import check
-from llm import ClaudeLLM
+from llm import make_llm
 
 RESULTS_DIR = Path(__file__).parent / "results"
 
@@ -126,9 +126,12 @@ async def main() -> None:
     args = parser.parse_args()
 
     needs_llm = any(v != "v0" for v in args.versions)
-    if needs_llm and not os.getenv("ANTHROPIC_API_KEY"):
-        raise SystemExit("V1 到 V3 需要設定 ANTHROPIC_API_KEY（寫在 .env）")
-    llm = ClaudeLLM() if needs_llm else None
+    llm = make_llm() if needs_llm else None
+    if needs_llm and llm is None:
+        key = "GEMINI_API_KEY" if config.LLM_PROVIDER == "gemini" else "ANTHROPIC_API_KEY"
+        raise SystemExit(f"V1 到 V3 需要設定 {key}（寫在 .env）")
+    if needs_llm:
+        print(f"模型：{config.LLM_PROVIDER}（{config.MODEL_STRONG} / {config.MODEL_FAST}）")
 
     cases = load_testset(args.testset)
     print(f"測試集：{args.testset}（{len(cases)} 筆，詐騙 {sum(c['is_scam'] for c in cases)} 筆）")
@@ -149,7 +152,8 @@ async def main() -> None:
     RESULTS_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     (RESULTS_DIR / f"{stamp}_summary.md").write_text(
-        f"測試集：{args.testset.name}，{len(cases)} 筆，重複 {args.repeats} 次\n\n{table}\n", encoding="utf-8"
+        f"測試集：{args.testset.name}，{len(cases)} 筆，重複 {args.repeats} 次\n"
+        f"模型：{config.LLM_PROVIDER}（{config.MODEL_STRONG} / {config.MODEL_FAST}）\n\n{table}\n", encoding="utf-8"
     )
     with (RESULTS_DIR / f"{stamp}_cases.csv").open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=sorted({k for r in all_rows for k in r}))

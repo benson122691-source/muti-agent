@@ -1,19 +1,40 @@
 """
-llm.py — 呼叫 Claude 的唯一入口。
+llm.py — 呼叫模型的唯一入口。
 
 為什麼要包一層，而不是在各處直接呼叫 anthropic？
   1. 每次呼叫都自動記錄 token 用量（算成本用）。
   2. 測試時可以換成 FakeLLM，不用花錢、不用網路，也能測整個流程。
+  3. 可以換成別家模型：Gemini 的轉接層在 llm_gemini.py。
 
 agent_loop.py 只認得 `await llm.create(...)` 這個介面，
-不管背後是真的 Claude 還是 FakeLLM。
+不管背後是 Claude、Gemini 還是 FakeLLM。
+
+要用哪一家，由 .env 的 LLM_PROVIDER 決定（claude 或 gemini），其他程式呼叫 make_llm() 就好。
 """
 
+import os
 from types import SimpleNamespace
 
 import anthropic
 
+import config
 from tracing import Trace
+
+
+def make_llm():
+    """
+    依照 config.LLM_PROVIDER 建立模型。
+    對應的 API 金鑰沒設定時回傳 None，呼叫端會自動降級成 V0（只用分類器）。
+    """
+    if config.LLM_PROVIDER == "gemini":
+        if not os.getenv("GEMINI_API_KEY"):
+            return None
+        from llm_gemini import GeminiLLM  # 用到才載入，沒裝 Google 套件也不影響 Claude 版本
+        return GeminiLLM()
+
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return None
+    return ClaudeLLM()
 
 
 class ClaudeLLM:
