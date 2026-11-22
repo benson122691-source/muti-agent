@@ -204,3 +204,34 @@ def test_agent_reminded_when_it_only_talks():
     })
     run(check("保證獲利", "v2", llm=fake))
     assert fake.calls.count("router") == 2
+
+
+# ---------------------------------------------------------------------------
+# 模型暫時無法使用時的備援（例如 Gemini 回 503）
+# ---------------------------------------------------------------------------
+
+
+def test_aggregator_failure_falls_back_to_rules():
+    fake = FakeLLM({
+        "router": [[routing(has_url=False)]],
+        "script_analyzer": [[fake_tool_call("submit_finding", finding("script_analyzer", "scam", 0.9))]],
+        "case_matcher": [[fake_tool_call("submit_finding", finding("case_matcher", "unknown", 0.2))]],
+        "aggregator": [],  # 沒有劇本 → 丟錯，模擬模型暫時無法使用
+    })
+    report, _ = run(check("保證獲利加LINE", "v2", llm=fake))
+    assert report.risk_level == "high"  # 有一個信心 0.9 的 scam 訊號
+    assert report.scam_type == "投資"   # 沿用分流的判斷
+    assert "規則產生" in report.summary
+
+
+def test_reviewer_failure_keeps_report_unreviewed():
+    fake = FakeLLM({
+        "router": [[routing(has_url=False)]],
+        "script_analyzer": [[fake_tool_call("submit_finding", finding("script_analyzer"))]],
+        "case_matcher": [[fake_tool_call("submit_finding", finding("case_matcher"))]],
+        "aggregator": [[draft("high")]],
+        "reviewer": [],  # 審查 agent 失敗
+    })
+    report, _ = run(check("保證獲利加LINE", "v3", llm=fake))
+    assert report.reviewed is False
+    assert report.risk_level == "high"

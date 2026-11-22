@@ -36,3 +36,14 @@ def test_feedback_masks_pii(client):
     client.post("/api/feedback", json={"trace_id": "abc", "is_scam": True, "note": "他給我 0912345678"})
     saved = config.FEEDBACK_PATH.read_text(encoding="utf-8")
     assert "0912345678" not in saved
+
+
+def test_check_falls_back_to_v0_when_model_fails(client, monkeypatch):
+    """模型在查核途中失敗（例如分流就遇到 503），API 應該改用 V0，而不是回 500。"""
+    from llm import FakeLLM
+    monkeypatch.setattr(main, "llm", FakeLLM({}))  # 沒有任何劇本 → 第一個 agent 就失敗
+    response = client.post("/api/check", json={"text": "保證獲利加LINE", "version": "v1"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["version_used"] == "v0"
+    assert "模型暫時無法使用" in data["downgrade_reason"]

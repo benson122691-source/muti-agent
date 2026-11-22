@@ -118,12 +118,54 @@ async def _run_checkers(names: list[str], text: str, llm, trace: Trace, hint: st
     return findings
 
 
-async def _aggregate(text: str, findings: dict[str, Finding], llm, trace: Trace) -> Report:
+async def _aggregate(
+    text: str, findings: dict[str, Finding], llm, trace: Trace, scam_type: str = "其他"
+) -> Report:
     findings_json = json.dumps([f.model_dump() for f in findings.values()], ensure_ascii=False, indent=2)
     task = wrap_message(text) + f"\n\n查核結果：\n<findings>\n{findings_json}\n</findings>"
-    draft = await make_aggregator().run(task, llm, trace)
+    try:
+        draft = await make_aggregator().run(task, llm, trace)
+    except Exception as e:  # noqa: BLE001
+        # 模型暫時無法使用時，改用規則彙整：查核 agent 的辛苦成果不要白費
+        trace.log("aggregator", "error", f"彙整失敗，改用規則彙整：{e}")
+        return rule_based_report(findings, scam_type)
     # findings 直接由程式接上，不靠模型抄寫
     return Report(**draft.model_dump(), findings=list(findings.values()))
+
+
+def rule_based_report(findings: dict[str, Finding], scam_type: str) -> Report:
+    """
+    不用模型的備用彙整，規則和彙整 agent 的 prompt 一樣：
+      high：有一個信心 0.8 以上的 scam 訊號，或兩個以上 scam 訊號
+      medium：有一個 scam 訊號
+      low：沒有 scam 訊號
+    """
+    scams = [f for f in findings.values() if f.signal == "scam"]
+    if any(f.confidence >= 0.8 for f in scams) or len(scams) >= 2:
+        risk = "high"
+    elif scams:
+        risk = "medium"
+    else:
+        risk = "low"
+
+    evidence = [e for f in scams for e in f.evidence][:3]
+    if risk == "low":
+        summary = "目前未發現明顯的詐騙訊號。"
+        advice = "仍請保持警覺，有疑慮請撥打 165 反詐騙專線查證。"
+    else:
+        summary = "發現詐騙訊號：" + "；".join(evidence)
+        advice = "不要點擊連結、不要加 LINE、不要轉帳，有疑慮請撥打 165 反詐騙專線。"
+    if risk == "low":
+        scam_type = "非詐騙"
+    elif scam_type == "非詐騙":
+        scam_type = "其他"  # 分流以為不是詐騙，但查核發現了訊號：類型改成「其他」
+    return Report(
+        risk_level=risk,
+        scam_type=scam_type,
+        summary=summary + "（彙整 agent 暫時無法使用，此結論由規則產生）",
+        findings=list(findings.values()),
+        advice=advice,
+    )
 
 
 async def run_multi(text: str, llm, trace: Trace, review: bool) -> Report:
@@ -132,7 +174,7 @@ async def run_multi(text: str, llm, trace: Trace, review: bool) -> Report:
     trace.log("pipeline", "routing", {"decision": decision.model_dump(), "checkers": names})
 
     findings = await _run_checkers(names, text, llm, trace)
-    report = await _aggregate(text, findings, llm, trace)
+    report = await _aggregate(text, findings, llm, trace, decision.scam_type)
 
     if not review:
         return report  # V2 到這裡結束
@@ -141,7 +183,12 @@ async def run_multi(text: str, llm, trace: Trace, review: bool) -> Report:
     reviewer = make_reviewer()
     for attempt in range(config.MAX_REVIEW_RETRIES + 1):
         task = wrap_message(text) + f"\n\n待審查的報告：\n<report>\n{report.model_dump_json(indent=2)}\n</report>"
-        result = await reviewer.run(task, llm, trace)
+        try:
+            result = await reviewer.run(task, llm, trace)
+        except Exception as e:  # noqa: BLE001
+            # 審查 agent 失敗：保留報告，標示「未通過審查」交給下面的保守處理
+            trace.log("reviewer", "error", f"審查失敗：{e}")
+            break
         trace.log("pipeline", "review", {"attempt": attempt, "result": result.model_dump()})
 
         if result.approved:
@@ -154,7 +201,7 @@ async def run_multi(text: str, llm, trace: Trace, review: bool) -> Report:
         recheck = [n for n in result.recheck_agents if n in names] or names
         new_findings = await _run_checkers(recheck, text, llm, trace, hint="\n".join(result.problems))
         findings.update(new_findings)
-        report = await _aggregate(text, findings, llm, trace)
+        report = await _aggregate(text, findings, llm, trace, decision.scam_type)
 
     # 重查後仍不通過：保留報告，但標示未通過審查，並把風險至少拉到 medium（寧可保守）
     report.reviewed = False

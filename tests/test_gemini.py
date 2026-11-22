@@ -121,6 +121,16 @@ def test_retries_on_rate_limit():
     assert len(client.requests) == 2
 
 
+def test_retries_when_model_is_busy():
+    """Gemini 回 503（模型太忙）時也要重試。"""
+    client = FakeGeminiClient([
+        errors.ServerError(503, {"error": {"message": "high demand", "status": "UNAVAILABLE"}}),
+        gemini_reply(call_part("submit_finding", FINDING)),
+    ])
+    result = asyncio.run(make_checkers()["script_analyzer"].run("測試", GeminiLLM(client=client), Trace()))
+    assert result.signal == "scam"
+
+
 def test_other_errors_are_not_retried():
     client = FakeGeminiClient([errors.ClientError(400, {"error": {"message": "bad request"}})])
     with pytest.raises(errors.ClientError):

@@ -67,7 +67,13 @@ def health():
 async def api_check(req: CheckRequest):
     version, downgrade_reason = _pick_version(req.version)
     started = time.time()
-    report, trace = await check(req.text, version, llm)
+    try:
+        report, trace = await check(req.text, version, llm)
+    except Exception as e:  # noqa: BLE001
+        # 例如分流或單一 agent 遇到模型暫時無法使用：改用 V0，讓使用者至少拿到結果
+        downgrade_reason = f"模型暫時無法使用（{e.__class__.__name__}），已改用 V0（只用分類器），請稍後再試"
+        version = "v0"
+        report, trace = await check(req.text, "v0", llm)
     return {
         "trace_id": trace.trace_id,
         "version_used": version,

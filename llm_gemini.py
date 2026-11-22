@@ -29,8 +29,13 @@ from google.genai import errors, types
 
 from tracing import Trace
 
-MAX_RETRIES = 3          # 撞到使用次數限制（429）時最多重試幾次
-RETRY_WAIT_SEC = 15      # 第一次重試前等幾秒，之後每次加倍
+# 這些錯誤通常等一下就會好，值得重試：
+#   429 = 超過使用次數限制（免費方案很常遇到）
+#   500 = Google 伺服器內部錯誤
+#   503 = 模型暫時太忙（high demand）
+RETRYABLE_CODES = {429, 500, 503}
+MAX_RETRIES = 3          # 最多重試幾次
+RETRY_WAIT_SEC = 5       # 第一次重試前等幾秒，之後每次加倍（5、10、20 秒）
 
 
 class GeminiLLM:
@@ -63,10 +68,9 @@ class GeminiLLM:
             try:
                 return await self.client.aio.models.generate_content(model=model, contents=contents, config=config)
             except errors.APIError as e:
-                # 429 = 超過使用次數限制，免費方案很常遇到；等一下再試通常就會好
-                if e.code != 429 or attempt == MAX_RETRIES:
+                if e.code not in RETRYABLE_CODES or attempt == MAX_RETRIES:
                     raise
-                trace.log(agent_name, "error", f"Gemini 使用次數超過限制，{wait} 秒後重試")
+                trace.log(agent_name, "error", f"Gemini 回傳 {e.code}，{wait} 秒後重試")
                 await asyncio.sleep(wait)
                 wait *= 2
 
