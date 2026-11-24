@@ -90,6 +90,11 @@ def check_links(text: str) -> Finding | None:
     evidence, sources, unknown = [], [], False
     blacklisted, suspicious = 0, 0  # 黑名單命中（很確定）、新網域加可疑網頁（比較不確定）
     for u in urls:
+        if not u["is_complete"]:
+            # 例如截圖裡被換行切斷的網址：查了也只會「查不到」，誤導判斷
+            unknown = True
+            evidence.append(f"網址不完整（可能在截圖中被切斷），無法查核：{u['url']}")
+            continue
         listed = check_blacklist(u["domain"])
         if listed["listed"]:
             blacklisted += 1

@@ -7,7 +7,7 @@ from privacy import mask_pii
 from sandbox.service import is_public_host, summarize_html
 from tools.blacklist import check_blacklist
 from tools.cases import search_similar_cases
-from tools.extract import analyze_urls, extract_contacts, get_domain
+from tools.extract import analyze_urls, extract_contacts, get_domain, is_complete_url, rejoin_broken_urls
 from tools.licensed import lookup_licensed_company
 
 
@@ -66,3 +66,21 @@ def test_sandbox_summary_truncates_title():
     summary = summarize_html(html, "https://x.example")
     assert len(summary["title"]) <= 80
     assert summary["has_password_field"] is True
+
+
+def test_rejoin_url_broken_across_lines():
+    """截圖裡的長網址常被換行切斷，要接回一行。"""
+    text = "打開 https://muti-agent-\nproduction.up.railway.app 看看\n下一行是中文"
+    assert rejoin_broken_urls(text) == "打開 https://muti-agent-production.up.railway.app 看看\n下一行是中文"
+    # 斷兩次也要接回來
+    assert "https://a.example/long/path/page.html" in rejoin_broken_urls("https://a.example/long/\npath/\npage.html")
+    # 網址正常結束、下一行是中文：不要亂接
+    assert rejoin_broken_urls("https://abc.com\n請點擊") == "https://abc.com\n請點擊"
+
+
+def test_incomplete_url_detection():
+    assert is_complete_url("https://muti-agent-") is False
+    assert is_complete_url("http://localhost") is False
+    assert is_complete_url("https://muti-agent-production.up.railway.app") is True
+    assert is_complete_url("http://1.2.3.4/login") is True
+    assert analyze_urls("看 https://muti-agent-")["urls"][0]["is_complete"] is False

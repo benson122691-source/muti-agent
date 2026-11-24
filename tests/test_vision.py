@@ -54,6 +54,12 @@ def test_read_screenshot_returns_model_text():
     assert "保證獲利" in text
 
 
+def test_read_screenshot_rejoins_broken_urls():
+    fake = FakeLLM({"image_reader": ["【網址】https://fake-invest-\ndemo.example/join"]})
+    text = asyncio.run(read_screenshot(PNG, fake, Trace()))
+    assert "https://fake-invest-demo.example/join" in text
+
+
 def test_read_screenshot_rejects_empty_result():
     fake = FakeLLM({"image_reader": ["   "]})
     with pytest.raises(ImageError, match="讀不到"):

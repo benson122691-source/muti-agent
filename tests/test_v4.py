@@ -68,6 +68,16 @@ def test_link_rule_sandbox_down_is_unknown(monkeypatch):
     assert check_links("看這裡 https://unknown.example").signal == "unknown"
 
 
+def test_link_rule_incomplete_url_is_unknown(monkeypatch):
+    """被切斷的網址不能拿去查：查了只會得到「查不到」，誤導判斷。"""
+    calls = []
+    monkeypatch.setattr(evidence, "fetch_page_safely", lambda url: calls.append(url) or {})
+    finding = check_links("請點 https://muti-agent-")
+    assert finding.signal == "unknown"
+    assert "不完整" in finding.evidence[0]
+    assert calls == []  # 完全沒有去抓網頁
+
+
 def test_link_rule_no_url_skipped():
     assert check_links("沒有網址的訊息") is None
 

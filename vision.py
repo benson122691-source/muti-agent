@@ -15,6 +15,7 @@ vision.py — 截圖查核的第一步：把圖片轉成文字。
 
 import config
 from agents import prompts
+from tools.extract import rejoin_broken_urls
 from tracing import Trace
 
 # 接受的圖片格式。用檔案開頭的「特徵碼」判斷，不相信檔名或瀏覽器說的類型（可以被偽造）
@@ -68,6 +69,9 @@ async def read_screenshot(image: bytes, llm, trace: Trace) -> str:
     )
     if not text.strip():
         raise ImageError("圖片中讀不到任何文字，請換一張比較清楚的截圖")
+
+    # 模型有時還是會照截圖的換行把長網址抄成兩行，這裡再用程式接回去
+    text = rejoin_broken_urls(text)
 
     trace.log("image_reader", "output", {"length": len(text)})
     return text
