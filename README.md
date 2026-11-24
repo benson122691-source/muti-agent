@@ -2,14 +2,15 @@
 
 貼上一則可疑訊息，或上傳截圖，系統用多個 AI agent 同時查核，回傳風險等級、具體證據和建議。
 
-本專案的重點不只是 demo，而是**用同一份測試集比較四個版本**，用數據回答「多 agent 到底值不值得」：
+本專案的重點不只是 demo，而是**用同一份測試集比較五個版本**，用數據回答「多 agent 到底值不值得」：
 
 | 版本 | 架構 |
 | --- | --- |
 | V0 | 只用 ML 分類器（不呼叫 LLM） |
 | V1 | 單一 agent，擁有全部工具 |
 | V2 | 分流 → 4 個查核 agent 平行執行 → 彙整 |
-| V3 | V2 ＋ 審查 agent，不通過就退回重查 |
+| V3 | V2 ＋ 審查 agent，不通過就退回重查（呼叫模型 10 次以上） |
+| V4 | 精簡版：程式自己跑完所有工具，再交給判讀 agent 寫結論（只呼叫模型 1 次，網站預設） |
 
 ```text
 使用者訊息 → 分流 agent ─┬─ 連結查核（隔離環境）─┐
@@ -52,7 +53,7 @@ docker compose up --build
 | --- | --- |
 | `pytest` | 跑單元測試（用假模型，不需要金鑰、不花錢） |
 | `python -m evals.run_eval` | 評估 V0 |
-| `python -m evals.run_eval --versions v0 v1 v2 v3 --repeats 3` | 四個版本完整對照（需要金鑰） |
+| `python -m evals.run_eval --versions v0 v1 v2 v3 v4 --repeats 3` | 五個版本完整對照（需要金鑰） |
 | `python -m ml.train --data 你的資料.jsonl` | 用自己的資料重新訓練分類器 |
 | `python -m crawlers.update_data` | 下載最新的 165 開放資料 |
 

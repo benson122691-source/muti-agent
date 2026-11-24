@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
 app = FastAPI(title="詐騙訊息多 Agent 查核系統")
 WEB_DIR = Path(__file__).parent.parent / "web"
-VERSIONS = ("v0", "v1", "v2", "v3")
+VERSIONS = ("v0", "v1", "v2", "v3", "v4")
 
 # 依 LLM_PROVIDER 建立 Claude 或 Gemini；沒有 API 金鑰時是 None，仍可運作，只是只能用 V0
 llm = make_llm()
@@ -84,6 +84,8 @@ async def _run_check(text: str, requested_version: str, trace: Trace | None = No
     return {
         "trace_id": trace.trace_id,
         "version_used": version,
+        # complete=False 代表「使用者要的版本沒跑完，被迫改用 V0」，網頁不會把結果當成正式結論顯示
+        "complete": not downgrade_reason,
         "downgrade_reason": downgrade_reason,
         "elapsed_sec": round(time.time() - started, 2),
         "tokens": trace.total_tokens(),
@@ -112,7 +114,7 @@ async def api_check(req: CheckRequest):
 
 
 @app.post("/api/check-image")
-async def api_check_image(image: UploadFile = File(...), version: str = Form("v3")):
+async def api_check_image(image: UploadFile = File(...), version: str = Form("v4")):
     """
     截圖查核。和文字查核的差別只有第一步：先用模型把圖片轉成文字。
     讀圖一定要用模型，所以沒有 API 金鑰或超過每日上限時，直接請使用者改貼文字。

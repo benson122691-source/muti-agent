@@ -3,7 +3,7 @@ evals/run_eval.py — 用測試集評估各版本，產生對照表。
 
 執行方式：
     python -m evals.run_eval                                # 預設：只跑 V0（不用 API 金鑰）
-    python -m evals.run_eval --versions v0 v1 v2 v3         # 四個版本都跑（需要 API 金鑰）
+    python -m evals.run_eval --versions v0 v1 v2 v3 v4      # 五個版本都跑（需要 API 金鑰）
     python -m evals.run_eval --testset evals/testset.jsonl --repeats 3
 
 測試集格式（JSONL，一行一筆）：
@@ -121,7 +121,7 @@ def to_markdown(results: dict[str, dict]) -> str:
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--testset", type=Path, default=Path(__file__).parent / "sample_testset.jsonl")
-    parser.add_argument("--versions", nargs="+", default=["v0"], choices=["v0", "v1", "v2", "v3"])
+    parser.add_argument("--versions", nargs="+", default=["v0"], choices=["v0", "v1", "v2", "v3", "v4"])
     parser.add_argument("--repeats", type=int, default=1, help="LLM 有隨機性，建議跑 3 次取平均")
     args = parser.parse_args()
 

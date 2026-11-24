@@ -1,22 +1,27 @@
 """
-agents/pipeline.py — 把 agent 串起來，做成 V0 到 V3 四個版本。
+agents/pipeline.py — 把 agent 串起來，做成 V0 到 V4 五個版本。
 
   V0：只用 ML 分類器，不呼叫 LLM（最便宜、最快，當作最低基準）
   V1：單一 agent 拿全部工具，自己決定怎麼查
   V2：分流 → 查核 agent 平行執行 → 彙整
-  V3：V2 再加審查 agent，不通過就退回重查
+  V3：V2 再加審查 agent，不通過就退回重查（呼叫模型 10 次以上）
+  V4：精簡版。程式自己跑完所有工具，再交給判讀 agent 寫結論（只呼叫模型 1 次）← 網站預設
 
-四個版本用同一組工具、同一份測試集比較，才能知道「多 agent」和「審查」各自有沒有幫助。
+五個版本用同一組工具、同一份測試集比較，才能知道「多 agent」「審查」「讓模型決定用哪些工具」
+各自有沒有幫助，值不值得多花的時間和錢。
 
 對外只需要用 check()：
-    report, trace = await check("訊息內容", version="v3", llm=ClaudeLLM())
+    report, trace = await check("訊息內容", version="v4", llm=make_llm())
 """
 
 import asyncio
 import json
 
 import config
-from agents.definitions import make_aggregator, make_checkers, make_reviewer, make_router, make_single_agent
+from agents.definitions import (
+    make_aggregator, make_checkers, make_judge, make_reviewer, make_router, make_single_agent,
+)
+from agents.evidence import gather_evidence
 from ml.classifier import find_tactics, scam_probability
 from schemas import Finding, Report, RoutingDecision
 from tools.extract import extract_urls
@@ -212,6 +217,27 @@ async def run_multi(text: str, llm, trace: Trace, review: bool) -> Report:
 
 
 # ============================================================
+# V4：精簡版（程式跑工具 + 1 次模型判讀）
+# ============================================================
+
+async def run_v4(text: str, llm, trace: Trace) -> Report:
+    # 1. 程式自己跑完所有工具，用規則整理成 findings（不用模型，見 agents/evidence.py）
+    findings = await gather_evidence(text)
+    trace.log("pipeline", "evidence", {name: f.signal for name, f in findings.items()})
+
+    # 2. 把證據一次交給判讀 agent
+    findings_json = json.dumps([f.model_dump() for f in findings.values()], ensure_ascii=False, indent=2)
+    task = wrap_message(text) + f"\n\n工具查到的證據：\n<evidence>\n{findings_json}\n</evidence>"
+    try:
+        draft = await make_judge().run(task, llm, trace)
+    except Exception as e:  # noqa: BLE001
+        # 模型無法使用時，改用規則判斷：證據都已經查好了，不要浪費
+        trace.log("judge", "error", f"判讀失敗，改用規則彙整：{e}")
+        return rule_based_report(findings, "其他")
+    return Report(**draft.model_dump(), findings=list(findings.values()))
+
+
+# ============================================================
 # 對外入口
 # ============================================================
 
@@ -231,6 +257,8 @@ async def check(text: str, version: str, llm, trace: Trace | None = None) -> tup
         report = await run_multi(text, llm, trace, review=False)
     elif version == "v3":
         report = await run_multi(text, llm, trace, review=True)
+    elif version == "v4":
+        report = await run_v4(text, llm, trace)
     else:
         raise ValueError(f"未知的版本：{version}")
 

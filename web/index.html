@@ -20,6 +20,8 @@
     button:disabled { opacity: .5; cursor: wait; }
     .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; color: #fff; font-weight: 600; }
     .badge.high { background: var(--high); } .badge.medium { background: var(--medium); } .badge.low { background: var(--low); }
+    .badge.pending { background: var(--quiet); }
+    .notice { background: #fff8c5; border: 1px solid #d4a72c; border-radius: 8px; padding: 10px 12px; }
     .meta { color: var(--quiet); font-size: 13px; margin-top: 8px; }
     .finding { border-top: 1px solid var(--line); padding: 12px 0; }
     .finding h3 { font-size: 15px; margin: 0 0 6px; }
@@ -54,7 +56,8 @@
     <div class="row">
       <label>版本
         <select id="version">
-          <option value="v3" selected>V3 多 agent ＋ 審查</option>
+          <option value="v4" selected>V4 精簡版（建議）</option>
+          <option value="v3">V3 多 agent ＋ 審查</option>
           <option value="v2">V2 多 agent</option>
           <option value="v1">V1 單一 agent</option>
           <option value="v0">V0 只用分類器</option>
@@ -70,7 +73,7 @@
     <strong id="type" style="margin-left:8px"></strong>
     <p id="summary"></p>
     <p><strong>建議：</strong><span id="advice"></span></p>
-    <p id="downgrade" class="warn"></p>
+    <p id="downgrade" class="notice hidden"></p>
     <div class="meta" id="meta"></div>
     <details id="extracted-box" class="hidden">
       <summary>模型從截圖讀到的內容（請確認有沒有讀錯）</summary>
@@ -188,12 +191,22 @@
     const report = data.report;
     lastTraceId = data.trace_id;
 
-    $("risk").textContent = RISK_TEXT[report.risk_level];
-    $("risk").className = `badge ${report.risk_level}`;
-    $("type").textContent = report.scam_type;
-    $("summary").textContent = report.summary;
+    if (data.complete) {
+      $("risk").textContent = RISK_TEXT[report.risk_level];
+      $("risk").className = `badge ${report.risk_level}`;
+      $("type").textContent = report.scam_type;
+      $("summary").textContent = report.summary;
+      $("downgrade").classList.add("hidden");
+    } else {
+      // 要的版本沒跑完、被迫改用 V0：不顯示風險標籤，避免使用者把粗略的猜測當成結論
+      $("risk").textContent = "查核未完成";
+      $("risk").className = "badge pending";
+      $("type").textContent = "";
+      $("summary").textContent = `以下只是簡易分類器的初步參考，可信度低：${report.summary}`;
+      $("downgrade").textContent = `完整查核沒有完成：${data.downgrade_reason}`;
+      $("downgrade").classList.remove("hidden");
+    }
     $("advice").textContent = report.advice;
-    $("downgrade").textContent = data.downgrade_reason;
     $("extracted").textContent = data.extracted_text || "";
     $("extracted-box").classList.toggle("hidden", !data.extracted_text);
     $("meta").textContent =

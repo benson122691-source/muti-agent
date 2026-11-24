@@ -137,6 +137,11 @@ def make_reviewer() -> Agent:
     return Agent("reviewer", prompts.REVIEWER, [], ReviewResult, config.MODEL_STRONG)
 
 
+def make_judge() -> Agent:
+    """V4 的判讀 agent：工具已經由程式跑完，它只負責讀證據、寫結論，所以不需要工具。"""
+    return Agent("judge", prompts.JUDGE, [], ReportDraft, config.MODEL_STRONG, max_steps=3)
+
+
 # ---------- 單一 agent（對照組 V1）：一個 agent 拿全部工具 ----------
 
 def make_single_agent() -> Agent:

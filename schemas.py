@@ -79,7 +79,7 @@ class CheckRequest(BaseModel):
     """API 收到的請求。"""
 
     text: str = Field(min_length=1, max_length=5000)
-    version: Literal["v0", "v1", "v2", "v3"] = "v3"
+    version: Literal["v0", "v1", "v2", "v3", "v4"] = "v4"
 
 
 class FeedbackRequest(BaseModel):
