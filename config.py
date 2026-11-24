@@ -55,6 +55,9 @@ MAX_STEPS_PER_AGENT = 6        # 每個 agent 最多跟模型來回幾次
 MAX_REVIEW_RETRIES = 1         # 審查不通過時，最多退回重查幾次
 MAX_LLM_CHECKS_PER_DAY = int(os.getenv("MAX_LLM_CHECKS_PER_DAY", "200"))
 
+# ---------- 截圖查核 ----------
+MAX_IMAGE_MB = int(os.getenv("MAX_IMAGE_MB", "5"))  # 上傳圖片的大小上限
+
 # ---------- 時間上限（避免模型沒回應時一直卡住） ----------
 LLM_REQUEST_TIMEOUT_SEC = int(os.getenv("LLM_REQUEST_TIMEOUT_SEC", "45"))  # 單次呼叫模型最多等幾秒
 CHECK_TIMEOUT_SEC = int(os.getenv("CHECK_TIMEOUT_SEC", "120"))            # 一整次查核最多幾秒

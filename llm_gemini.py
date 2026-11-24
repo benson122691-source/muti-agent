@@ -67,6 +67,25 @@ class GeminiLLM:
             trace.add_usage(model, usage.prompt_token_count or 0, output)
         return to_claude_response(response)
 
+    async def read_image(
+        self, *, model: str, system: str, prompt: str, image: bytes, mime_type: str, trace: Trace
+    ) -> str:
+        """把圖片和指示一起送給 Gemini，回傳它讀出來的文字。Gemini 可以直接收圖片的原始 bytes。"""
+        contents = [types.Content(role="user", parts=[
+            types.Part.from_bytes(data=image, mime_type=mime_type),
+            types.Part(text=prompt),
+        ])]
+        config = types.GenerateContentConfig(system_instruction=system, max_output_tokens=4000)
+        response = await self._call_with_retry(model, contents, config, trace, "image_reader")
+
+        usage = response.usage_metadata
+        if usage:
+            output = (usage.candidates_token_count or 0) + (usage.thoughts_token_count or 0)
+            trace.add_usage(model, usage.prompt_token_count or 0, output)
+        parts = response.candidates[0].content.parts if response.candidates and response.candidates[0].content else []
+        # 只取真正的回答，跳過思考過程
+        return "".join(p.text for p in (parts or []) if p.text and not p.thought)
+
     async def _call_with_retry(self, model, contents, config, trace: Trace, agent_name: str):
         wait = RETRY_WAIT_SEC
         for attempt in range(MAX_RETRIES + 1):

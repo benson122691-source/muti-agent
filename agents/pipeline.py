@@ -215,8 +215,12 @@ async def run_multi(text: str, llm, trace: Trace, review: bool) -> Report:
 # 對外入口
 # ============================================================
 
-async def check(text: str, version: str, llm) -> tuple[Report, Trace]:
-    trace = Trace()
+async def check(text: str, version: str, llm, trace: Trace | None = None) -> tuple[Report, Trace]:
+    """
+    trace 通常不用傳。截圖查核時會傳入同一份 trace，
+    讓「讀圖」和「查核」記在同一份記錄裡（見 api/main.py 的 api_check_image）。
+    """
+    trace = trace or Trace()
     trace.log("pipeline", "start", {"version": version, "length": len(text)})
 
     if version == "v0":

@@ -2,6 +2,7 @@
 anthropic>=2.0
 google-genai>=1.50     # 使用 Gemini 時需要
 fastapi>=0.110
+python-multipart>=0.0.9   # 讓 FastAPI 能接收上傳的圖片
 uvicorn>=0.29
 pydantic>=2.6
 httpx>=0.27

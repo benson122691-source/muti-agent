@@ -9,9 +9,12 @@ llm.py — 呼叫模型的唯一入口。
 agent_loop.py 只認得 `await llm.create(...)` 這個介面，
 不管背後是 Claude、Gemini 還是 FakeLLM。
 
+另外每個模型類別都有 `await llm.read_image(...)`：把截圖轉成文字（截圖查核用，見 vision.py）。
+
 要用哪一家，由 .env 的 LLM_PROVIDER 決定（claude 或 gemini），其他程式呼叫 make_llm() 就好。
 """
 
+import base64
 import os
 from types import SimpleNamespace
 
@@ -57,6 +60,33 @@ class ClaudeLLM:
         trace.add_usage(model, response.usage.input_tokens, response.usage.output_tokens)
         return response
 
+    async def read_image(
+        self, *, model: str, system: str, prompt: str, image: bytes, mime_type: str, trace: Trace
+    ) -> str:
+        """把圖片和指示一起送給 Claude，回傳它讀出來的文字。"""
+        response = await self.client.messages.create(
+            model=model,
+            max_tokens=2000,
+            system=system,
+            messages=[claude_image_message(prompt, image, mime_type)],
+        )
+        trace.add_usage(model, response.usage.input_tokens, response.usage.output_tokens)
+        return "".join(block.text for block in response.content if block.type == "text")
+
+
+def claude_image_message(prompt: str, image: bytes, mime_type: str) -> dict:
+    """Claude 的圖片格式：圖片要先轉成 base64 文字，放在 image 區塊裡。"""
+    return {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": mime_type, "data": base64.b64encode(image).decode()},
+            },
+            {"type": "text", "text": prompt},
+        ],
+    }
+
 
 # ---------------------------------------------------------------------------
 # 以下是測試用的假模型
@@ -83,6 +113,9 @@ class FakeLLM:
                               [fake_tool_call("submit_finding", {...})] ],
         })
     key 是 agent 名稱，value 是「依序回傳的回應清單」，每個回應是一串內容區塊。
+
+    讀圖的劇本放在 "image_reader"，每個回應直接是一段文字：
+        FakeLLM({"image_reader": ["【文字內容】保證獲利…"], ...})
     """
 
     def __init__(self, scripts: dict[str, list[list]]):
@@ -99,3 +132,11 @@ class FakeLLM:
         trace.add_usage(model, 100, 50)  # 假裝用了一些 token
         stop_reason = "tool_use" if any(b.type == "tool_use" for b in content) else "end_turn"
         return SimpleNamespace(content=content, stop_reason=stop_reason)
+
+    async def read_image(self, *, model, system, prompt, image, mime_type, trace):
+        self.calls.append("image_reader")
+        replies = self.scripts.get("image_reader")
+        if not replies:
+            raise RuntimeError("FakeLLM 沒有為「image_reader」準備回應")
+        trace.add_usage(model, 300, 80)
+        return replies.pop(0)
